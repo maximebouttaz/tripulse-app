@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { 
-  User, Save, Activity, Link as LinkIcon, 
+import {
+  User, Save, Activity, Link as LinkIcon,
   Bell, Shield, LogOut, Smartphone, Check
 } from 'lucide-react';
 
@@ -40,7 +41,7 @@ const InputGroup = ({ label, value, unit, type = "text" }: any) => (
 );
 
 // --- COMPOSANT TOGGLE (INTEGRATION) ---
-const IntegrationRow = ({ name, icon, isConnected }: any) => (
+const IntegrationRow = ({ name, icon, isConnected, onConnect }: any) => (
   <div className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
     <div className="flex items-center gap-4">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isConnected ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-400'}`}>
@@ -53,23 +54,47 @@ const IntegrationRow = ({ name, icon, isConnected }: any) => (
         </p>
       </div>
     </div>
-    <button className={`
-      px-4 py-2 rounded-lg text-xs font-bold transition-all border
-      ${isConnected 
-        ? 'bg-white border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100' 
-        : 'bg-zinc-900 border-zinc-900 text-white hover:bg-zinc-800'}
-    `}>
+    <button
+      onClick={onConnect}
+      className={`
+        px-4 py-2 rounded-lg text-xs font-bold transition-all border
+        ${isConnected
+          ? 'bg-white border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100'
+          : 'bg-zinc-900 border-zinc-900 text-white hover:bg-zinc-800'}
+      `}
+    >
       {isConnected ? 'Déconnecter' : 'Connecter'}
     </button>
   </div>
 );
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const searchParams = useSearchParams();
   const [isSaving, setIsSaving] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState(false);
+  const [stravaMessage, setStravaMessage] = useState<string | null>(null);
+
+  // Vérifier si l'utilisateur vient de connecter Strava (retour du callback)
+  useEffect(() => {
+    const stravaStatus = searchParams.get('strava');
+    if (stravaStatus === 'success') {
+      setStravaConnected(true);
+      setStravaMessage('Strava connecté avec succès !');
+      setTimeout(() => setStravaMessage(null), 4000);
+    } else if (stravaStatus === 'error') {
+      setStravaMessage('Erreur lors de la connexion Strava.');
+      setTimeout(() => setStravaMessage(null), 4000);
+    }
+  }, [searchParams]);
+
+  const handleConnectStrava = () => {
+    // Redirige vers notre route OAuth qui redirige vers Strava
+    window.location.href = '/api/auth/strava';
+  };
 
   const handleSave = () => {
     setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 2000); // Simulation API
+    setTimeout(() => setIsSaving(false), 2000);
   };
 
   return (
@@ -148,21 +173,31 @@ export default function SettingsPage() {
             
             {/* 3. CONNEXIONS */}
             <Section title="Applications Connectées" icon={LinkIcon}>
+               {stravaMessage && (
+                 <div className={`mb-4 p-3 rounded-xl text-sm font-medium ${
+                   stravaMessage.includes('succès')
+                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                     : 'bg-red-50 text-red-700 border border-red-100'
+                 }`}>
+                   {stravaMessage}
+                 </div>
+               )}
                <div className="space-y-2 divide-y divide-zinc-100">
-                  <IntegrationRow 
-                    name="Strava" 
-                    isConnected={true} 
-                    icon={<span className="font-bold text-xs">ST</span>} 
+                  <IntegrationRow
+                    name="Strava"
+                    isConnected={stravaConnected}
+                    icon={<span className="font-bold text-xs">ST</span>}
+                    onConnect={handleConnectStrava}
                   />
-                  <IntegrationRow 
-                    name="Garmin Connect" 
-                    isConnected={true} 
-                    icon={<span className="font-bold text-xs">GC</span>} 
+                  <IntegrationRow
+                    name="Garmin Connect"
+                    isConnected={false}
+                    icon={<span className="font-bold text-xs">GC</span>}
                   />
-                  <IntegrationRow 
-                    name="TrainingPeaks" 
-                    isConnected={false} 
-                    icon={<span className="font-bold text-xs">TP</span>} 
+                  <IntegrationRow
+                    name="TrainingPeaks"
+                    isConnected={false}
+                    icon={<span className="font-bold text-xs">TP</span>}
                   />
                </div>
             </Section>
@@ -199,5 +234,13 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   );
 }

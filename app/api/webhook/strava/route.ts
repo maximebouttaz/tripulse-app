@@ -1,18 +1,17 @@
 import { NextResponse } from 'next/server';
+import { refreshStravaToken, getStravaActivity, saveActivityToSupabase } from '@/lib/strava';
 
 // 1. GESTION DE LA VÉRIFICATION (GET)
-// Strava va appeler cette URL une seule fois pour vérifier que tu es bien le propriétaire.
+// Strava appelle cette URL une seule fois pour vérifier que tu es le propriétaire.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  
+
   const hubMode = searchParams.get('hub.mode');
   const hubChallenge = searchParams.get('hub.challenge');
   const hubVerifyToken = searchParams.get('hub.verify_token');
 
-  // On vérifie que le mot de passe correspond à celui de ton .env.local
   if (hubMode === 'subscribe' && hubVerifyToken === process.env.STRAVA_VERIFY_TOKEN) {
-    console.log('✅ Webhook Strava vérifié avec succès !');
-    // On doit renvoyer le "hub.challenge" au format JSON pour valider
+    console.log('Webhook Strava vérifié avec succès !');
     return NextResponse.json({ 'hub.challenge': hubChallenge });
   }
 
@@ -20,33 +19,53 @@ export async function GET(request: Request) {
 }
 
 // 2. RÉCEPTION DES DONNÉES (POST)
-// C'est ici que Strava envoie les infos quand tu termines une course.
+// Strava envoie une notification ici à chaque nouvelle activité.
+// IMPORTANT : On doit répondre 200 en moins de 2 secondes, sinon Strava réessaie.
+// Le traitement lourd (fetch activité + sauvegarde) se fait de manière asynchrone.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    console.log('📨 Notification Strava reçue :', body);
 
-    // On vérifie le type d'événement
-    // object_type: 'activity' (une séance)
-    // aspect_type: 'create' (nouvelle séance), 'update' (titre modifié), 'delete'
+    console.log('Notification Strava reçue :', JSON.stringify(body));
+
     if (body.object_type === 'activity' && body.aspect_type === 'create') {
-      const activityId = body.object_id;
-      const ownerId = body.owner_id;
+      const activityId: number = body.object_id;
+      const athleteId: number = body.owner_id;
 
-      console.log(`🏃‍♂️ Nouvelle activité détectée ! ID: ${activityId} par User: ${ownerId}`);
-      
-      // ICI : C'est là qu'on ajoutera la logique pour :
-      // 1. Récupérer les détails complets de l'activité (Vitesse, Watts...)
-      // 2. L'envoyer à Supabase
-      // 3. Demander à l'IA d'analyser
+      console.log(`Nouvelle activité détectée ! ID: ${activityId} par Athlete: ${athleteId}`);
+
+      // Traitement asynchrone : on ne bloque pas la réponse
+      processNewActivity(athleteId, activityId).catch((err) =>
+        console.error('Erreur traitement activité:', err)
+      );
     }
 
-    // Il faut TOUJOURS répondre 200 OK rapidement (sinon Strava réessaie en boucle)
+    // Répondre immédiatement 200 OK (obligatoire pour Strava)
     return NextResponse.json({ message: 'Event received' }, { status: 200 });
-
   } catch (error) {
     console.error('Erreur Webhook:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
+}
+
+// --- TRAITEMENT D'UNE NOUVELLE ACTIVITÉ ---
+async function processNewActivity(athleteId: number, activityId: number) {
+  // 1. Récupérer un token valide pour cet athlète
+  const accessToken = await refreshStravaToken(athleteId);
+  if (!accessToken) {
+    console.error(`Pas de token pour athlete ${athleteId}. L'utilisateur doit reconnecter Strava.`);
+    return;
+  }
+
+  // 2. Appeler l'API Strava pour les détails complets
+  const activity = await getStravaActivity(accessToken, activityId);
+  if (!activity) {
+    console.error(`Impossible de récupérer l'activité ${activityId}`);
+    return;
+  }
+
+  console.log(`Activité récupérée : ${activity.name} (${activity.type}) - ${(activity.distance / 1000).toFixed(1)}km`);
+
+  // 3. Sauvegarder dans Supabase
+  await saveActivityToSupabase(activity, athleteId);
 }
