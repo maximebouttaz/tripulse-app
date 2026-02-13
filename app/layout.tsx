@@ -1,10 +1,10 @@
-import "./globals.css";
 import type { Metadata } from "next";
-import "./globals.css"; // <--- C'EST CETTE LIGNE QUI MANQUE SOUVENT !
+import "./globals.css";
+import { SmartNav } from "@/components/SmartNav"; // Import de la nav
 
 export const metadata: Metadata = {
-  title: "TriCoach AI",
-  description: "Premium Athlete Dashboard",
+  title: "TriPulse App",
+  description: "AI Coaching for Triathletes",
 };
 
 export default function RootLayout({
@@ -13,8 +13,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="fr">
+      {/* md:pl-24 crée l'espace pour la barre latérale sur PC */}
+      <body className="antialiased md:pl-24 bg-zinc-50">
+        <SmartNav />
+        {children}
+      </body>
     </html>
   );
 }
