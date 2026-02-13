@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { refreshStravaToken, getStravaActivity, saveActivityToSupabase } from '@/lib/strava';
+import { refreshStravaToken, saveActivityToSupabase } from '@/lib/strava';
 
 // Import de toutes les activités historiques depuis Strava.
 // Appelle : GET /api/strava/import?athlete_id=126239815
-// Strava limite à 100 requêtes / 15 min et 1000 / jour.
-// On récupère les résumés par page, puis les détails un par un.
+//
+// Limites Strava : 100 lectures / 15 min, 1000 / jour.
+// On sauvegarde directement les résumés (1 requête par page de 200).
+// Pour 1000 activités = seulement 5 requêtes API.
+
+export const maxDuration = 60; // Vercel : max 60s pour les fonctions
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,12 +26,11 @@ export async function GET(request: Request) {
     }
 
     let page = 1;
-    const perPage = 50;
+    const perPage = 200; // Max autorisé par Strava
     let totalImported = 0;
     let hasMore = true;
 
     while (hasMore) {
-      // 2. Récupérer une page de résumés d'activités
       console.log(`[Import] Page ${page}...`);
       const listRes = await fetch(
         `https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=${perPage}`,
@@ -47,24 +50,18 @@ export async function GET(request: Request) {
         break;
       }
 
-      // 3. Pour chaque activité, récupérer les détails complets et sauvegarder
-      for (const summary of activities) {
+      // Sauvegarder chaque résumé directement (pas de requête détail)
+      for (const activity of activities) {
         try {
-          const detail = await getStravaActivity(accessToken, summary.id);
-          if (detail) {
-            await saveActivityToSupabase(detail, athleteId);
-            totalImported++;
-            console.log(`[Import] ${totalImported} - ${detail.name} (${detail.type})`);
-          }
+          await saveActivityToSupabase(activity, athleteId);
+          totalImported++;
         } catch (err) {
-          console.error(`[Import] Erreur activité ${summary.id}:`, err);
+          console.error(`[Import] Erreur activité ${activity.id}:`, err);
         }
       }
 
+      console.log(`[Import] Page ${page} : ${activities.length} activités sauvegardées (total: ${totalImported})`);
       page++;
-
-      // Pause de 2s entre les pages pour respecter les rate limits Strava
-      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     return NextResponse.json({
