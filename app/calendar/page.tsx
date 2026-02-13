@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
   Clock, Zap, X, Shuffle, ChevronLeft, ChevronRight,
-  GripHorizontal, MoreHorizontal, Loader2
+  GripVertical, MoreHorizontal, Loader2, Activity,
+  Waves, Bike, CalendarDays
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -61,7 +63,6 @@ type Workout = {
   details: { warmup: string; main: string; cooldown: string };
 };
 
-// Mapper une ligne Supabase → Workout
 function rowToWorkout(row: any): Workout {
   return {
     id: row.id,
@@ -80,13 +81,25 @@ function rowToWorkout(row: any): Workout {
   };
 }
 
-// Styles Tailwind mappés
-const typeStyles: Record<string, { bg: string; text: string; border: string; accent: string }> = {
-  swim: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', accent: 'bg-cyan-500' },
-  bike: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', accent: 'bg-red-500' },
-  run: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', accent: 'bg-amber-500' },
-  strength: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', accent: 'bg-purple-500' },
-  rest: { bg: 'bg-zinc-50', text: 'text-zinc-500', border: 'border-zinc-200', accent: 'bg-zinc-400' },
+// --- STYLES PAR SPORT (cohérent avec le guide page.tsx) ---
+const typeStyles: Record<string, { bg: string; text: string; border: string; accent: string; icon: any; label: string }> = {
+  swim: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-100', accent: 'bg-cyan-500', icon: Waves, label: 'SWIM' },
+  bike: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-100', accent: 'bg-red-500', icon: Bike, label: 'BIKE' },
+  run: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100', accent: 'bg-amber-500', icon: Activity, label: 'RUN' },
+  strength: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-100', accent: 'bg-purple-500', icon: Zap, label: 'FORCE' },
+  rest: { bg: 'bg-zinc-50', text: 'text-zinc-400', border: 'border-zinc-200', accent: 'bg-zinc-300', icon: Clock, label: 'REPOS' },
+};
+
+// --- SPORT BADGE (identique au guide) ---
+const SportBadge = ({ type }: { type: string }) => {
+  const s = typeStyles[type] || typeStyles.rest;
+  const Icon = s.icon;
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg ${s.bg} border ${s.border}`}>
+      <Icon size={10} className={s.text} />
+      <span className={`text-[8px] font-mono font-bold tracking-widest ${s.text}`}>{s.label}</span>
+    </div>
+  );
 };
 
 export default function CalendarElitePage() {
@@ -115,6 +128,14 @@ export default function CalendarElitePage() {
     }
     return `${MONTH_NAMES[firstMonth]} – ${MONTH_NAMES[lastMonth]} ${year}`;
   }, [weekDays]);
+
+  // Stats de la semaine
+  const weekStats = useMemo(() => {
+    const totalTSS = workouts.reduce((sum, w) => sum + (w.tss || 0), 0);
+    const totalMin = workouts.reduce((sum, w) => sum + (w.durationMin || 0), 0);
+    const count = workouts.length;
+    return { totalTSS, totalMin, count };
+  }, [workouts]);
 
   // --- FETCH WORKOUTS DEPUIS SUPABASE ---
   useEffect(() => {
@@ -187,9 +208,7 @@ export default function CalendarElitePage() {
 
     const handlePointerUp = async () => {
       if (dragState.isDragging && dropTarget) {
-        // Optimistic update
         setWorkouts(prev => prev.map(w => w.id === dragState.workoutId ? { ...w, dateKey: dropTarget } : w));
-        // Persist dans Supabase
         const { error } = await supabase
           .from('workouts')
           .update({ date: dropTarget })
@@ -211,12 +230,10 @@ export default function CalendarElitePage() {
     };
   }, [dragState, dropTarget, findDropTarget, workouts]);
 
-  // Navigation semaine
   const goToPrevWeek = () => setWeekOffset(prev => prev - 1);
   const goToNextWeek = () => setWeekOffset(prev => prev + 1);
   const goToToday = () => setWeekOffset(0);
 
-  // Fonction Adapt/Shuffle
   const handleAdapt = async () => {
     setIsAdapting(true);
     const dateKeys = weekDays.map(d => d.dateKey);
@@ -225,13 +242,11 @@ export default function CalendarElitePage() {
       newDate: dateKeys[Math.floor(Math.random() * dateKeys.length)],
     }));
 
-    // Optimistic update
     setWorkouts(prev => prev.map(w => {
       const u = updates.find(u => u.id === w.id);
       return u ? { ...w, dateKey: u.newDate } : w;
     }));
 
-    // Persist en batch
     await Promise.all(
       updates.map(u =>
         supabase.from('workouts').update({ date: u.newDate }).eq('id', u.id)
@@ -243,33 +258,72 @@ export default function CalendarElitePage() {
   const draggingWorkout = dragState?.isDragging ? workouts.find(w => w.id === dragState.workoutId) : null;
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex flex-col h-screen overflow-hidden pb-20 md:pb-0">
+    <div className="min-h-screen bg-zinc-50 flex flex-col h-screen overflow-hidden pb-20 md:pb-0 relative">
 
-      {/* HEADER */}
-      <header className="flex-none px-6 py-5 flex justify-between items-center bg-white/50 backdrop-blur-sm border-b border-zinc-200">
-        <div>
-          <h1 className="font-display font-bold text-2xl text-zinc-900">Planning</h1>
-          <p className="text-xs font-mono text-zinc-400 mt-1">
-            Semaine {weekNumber}
-            {weekOffset !== 0 && (
-              <button onClick={goToToday} className="ml-2 text-zinc-900 underline underline-offset-2 hover:text-zinc-600 transition">
-                Aujourd&apos;hui
-              </button>
-            )}
-          </p>
+      {/* Background Orbs (comme le showcase du guide) */}
+      <div className="fixed top-[-15%] left-[-5%] w-[400px] h-[400px] bg-red-500/[0.03] blur-[100px] rounded-full pointer-events-none" />
+      <div className="fixed bottom-[-15%] right-[-5%] w-[400px] h-[400px] bg-cyan-500/[0.03] blur-[100px] rounded-full pointer-events-none" />
+
+      {/* HEADER — Glass style cohérent */}
+      <header className="flex-none px-6 py-5 flex justify-between items-center backdrop-blur-xl bg-white/70 border-b border-white/60 relative z-10">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-gradient-to-br from-red-600 to-rose-600 rounded-xl shadow-lg shadow-red-500/20">
+            <CalendarDays size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="font-display font-bold text-2xl tracking-tight text-zinc-900">Planning</h1>
+            <p className="text-xs font-mono text-zinc-400 mt-0.5">
+              Semaine {weekNumber}
+              {weekOffset !== 0 && (
+                <button onClick={goToToday} className="ml-2 text-red-600 font-bold hover:underline underline-offset-2 transition">
+                  Aujourd&apos;hui
+                </button>
+              )}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-xl">
-          <button onClick={goToPrevWeek} className="p-2 hover:bg-white rounded-lg text-zinc-500 shadow-sm transition"><ChevronLeft size={16}/></button>
-          <span className="font-mono font-bold text-zinc-900 text-sm px-2">{headerTitle}</span>
-          <button onClick={goToNextWeek} className="p-2 hover:bg-white rounded-lg text-zinc-500 shadow-sm transition"><ChevronRight size={16}/></button>
+
+        <div className="flex items-center gap-4">
+          {/* Week Stats Pills */}
+          {!isLoading && weekStats.count > 0 && (
+            <div className="hidden md:flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 border border-zinc-200 text-xs">
+                <Zap size={12} className="text-amber-500" />
+                <span className="font-mono font-bold text-zinc-700">{weekStats.totalTSS}</span>
+                <span className="text-zinc-400 font-medium">TSS</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 border border-zinc-200 text-xs">
+                <Clock size={12} className="text-zinc-400" />
+                <span className="font-mono font-bold text-zinc-700">
+                  {weekStats.totalMin >= 60 ? `${Math.floor(weekStats.totalMin / 60)}h${(weekStats.totalMin % 60).toString().padStart(2, '0')}` : `${weekStats.totalMin}min`}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 border border-zinc-200 text-xs">
+                <span className="font-mono font-bold text-zinc-700">{weekStats.count}</span>
+                <span className="text-zinc-400 font-medium">séances</span>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation semaine */}
+          <div className="flex items-center gap-1 bg-white/50 border border-zinc-200 p-1 rounded-2xl shadow-sm">
+            <button onClick={goToPrevWeek} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-500 transition">
+              <ChevronLeft size={16}/>
+            </button>
+            <span className="font-display font-bold text-zinc-900 text-sm px-3">{headerTitle}</span>
+            <button onClick={goToNextWeek} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-500 transition">
+              <ChevronRight size={16}/>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* GRILLE SEMAINE */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
         {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 size={32} className="animate-spin text-zinc-400" />
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <Loader2 size={28} className="animate-spin text-zinc-300" />
+            <span className="text-xs font-display font-medium text-zinc-400">Chargement du planning...</span>
           </div>
         ) : (
           <div className="grid grid-cols-7 gap-3 min-w-[900px] h-full">
@@ -277,69 +331,106 @@ export default function CalendarElitePage() {
               const isToday = dateKey === todayKey;
               const isDropHover = dropTarget === dateKey && dragState?.isDragging;
               const dayWorkouts = workouts.filter(w => w.dateKey === dateKey);
+              const dayTSS = dayWorkouts.reduce((s, w) => s + (w.tss || 0), 0);
 
               return (
                 <div key={dateKey} className="flex flex-col h-full">
-                  {/* En-tête Jour */}
-                  <div className="text-center pb-3 border-b border-zinc-200 mb-3">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{dayLabel}</span>
+
+                  {/* En-tête Jour — Style Glass */}
+                  <div className={`
+                    text-center pb-3 mb-3 rounded-2xl px-2 pt-2 transition-all
+                    ${isToday ? 'bg-zinc-900 shadow-lg shadow-zinc-900/20' : ''}
+                  `}>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${isToday ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                      {dayLabel}
+                    </span>
                     <div className={`
-                      mx-auto w-8 h-8 flex items-center justify-center rounded-full text-sm font-mono font-bold mt-1 transition-all
-                      ${isToday ? 'bg-zinc-900 text-white shadow-lg scale-110' : 'text-zinc-900'}
+                      mx-auto w-9 h-9 flex items-center justify-center rounded-xl text-sm font-mono font-bold mt-1 transition-all
+                      ${isToday ? 'bg-gradient-to-br from-red-600 to-rose-600 text-white shadow-md shadow-red-500/30' : 'text-zinc-900'}
                     `}>
                       {date.getDate()}
                     </div>
+                    {dayTSS > 0 && (
+                      <p className={`text-[9px] font-mono font-bold mt-1 ${isToday ? 'text-zinc-500' : 'text-zinc-300'}`}>
+                        {dayTSS} TSS
+                      </p>
+                    )}
                   </div>
 
-                  {/* Colonne Drop Zone */}
+                  {/* Colonne Drop Zone — Glass Card */}
                   <div
                     ref={(el) => setColumnRef(dateKey, el)}
                     className={`
-                      flex-1 rounded-2xl p-1 relative transition-all duration-200
-                      ${isDropHover ? 'bg-zinc-100 ring-2 ring-zinc-300 ring-dashed' : 'bg-zinc-100/30'}
+                      flex-1 rounded-2xl p-1.5 relative transition-all duration-200
+                      ${isDropHover
+                        ? 'bg-red-50/50 ring-2 ring-red-200 ring-dashed shadow-inner'
+                        : 'bg-white/30 backdrop-blur-sm border border-white/40'
+                      }
                     `}
                   >
-                    {/* Lignes de fond */}
-                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10 p-2">
-                      {[...Array(6)].map((_, i) => <div key={i} className="border-t border-zinc-900 w-full" />)}
-                    </div>
-
-                    {/* Cartes */}
+                    {/* Cartes Workout */}
                     <div className="relative z-10 flex flex-col gap-2">
                       {dayWorkouts.map(workout => {
                         const s = typeStyles[workout.type] || typeStyles.rest;
-                        const height = Math.max(58, workout.durationMin * 1.6);
+                        const height = Math.max(64, workout.durationMin * 1.6);
                         const isDragSource = dragState?.isDragging && dragState.workoutId === workout.id;
 
                         return (
-                          <div
+                          <motion.div
                             key={workout.id}
                             ref={el => { if (el) cardRefs.current[workout.id] = el; }}
                             onPointerDown={(e) => handlePointerDown(e, workout.id)}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: isDragSource ? 0.3 : 1, y: 0, scale: isDragSource ? 0.95 : 1 }}
+                            transition={{ duration: 0.3 }}
                             className={`
-                              relative w-full rounded-xl p-3 cursor-grab active:cursor-grabbing border-l-[4px] shadow-sm hover:shadow-md transition-all
+                              relative w-full rounded-2xl p-3 cursor-grab active:cursor-grabbing
+                              backdrop-blur-xl bg-white/70 border shadow-sm shadow-zinc-200/50
+                              hover:shadow-md hover:border-zinc-200 transition-all
                               flex flex-col justify-between select-none touch-none
-                              ${s.bg} ${s.text} ${s.border} border-l-current
-                              ${isDragSource ? 'opacity-30 scale-95 grayscale' : ''}
+                              ${s.border}
+                              ${isDragSource ? 'grayscale' : ''}
                             `}
-                            style={{ height }}
+                            style={{ minHeight: height }}
                           >
-                            <div>
+                            {/* Barre couleur sport en haut */}
+                            <div className={`absolute top-0 left-3 right-3 h-[3px] rounded-b-full ${s.accent} opacity-60`} />
+
+                            <div className="mt-1">
                               <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-1 opacity-60">
-                                  <GripHorizontal size={12} />
-                                  <span className="text-[9px] font-black uppercase tracking-widest">{workout.type}</span>
+                                <SportBadge type={workout.type} />
+                                <div className="flex items-center gap-1">
+                                  {workout.status === 'completed' && (
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+                                  )}
+                                  <GripVertical size={12} className="text-zinc-300" />
                                 </div>
-                                {workout.status === 'completed' && <div className="w-2 h-2 rounded-full bg-emerald-500" />}
                               </div>
-                              <h4 className="font-display font-bold text-sm leading-tight mt-1">{workout.title}</h4>
+                              <h4 className="font-display font-bold text-sm text-zinc-900 leading-tight mt-2">
+                                {workout.title}
+                              </h4>
                             </div>
-                            <div className="flex items-center gap-1 text-[10px] font-mono opacity-80 mt-auto">
-                              <Clock size={10} /> {workout.duration}
+
+                            <div className="flex items-center justify-between mt-auto pt-2">
+                              <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-400">
+                                <Clock size={10} /> {workout.duration}
+                              </div>
+                              {workout.tss > 0 && (
+                                <span className="text-[10px] font-mono font-bold text-zinc-300">
+                                  {workout.tss} TSS
+                                </span>
+                              )}
                             </div>
-                          </div>
+                          </motion.div>
                         );
                       })}
+
+                      {/* Empty day hint */}
+                      {dayWorkouts.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center min-h-[80px]">
+                          <span className="text-zinc-200 text-[10px] font-display font-medium">Repos</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -349,114 +440,150 @@ export default function CalendarElitePage() {
         )}
       </div>
 
-      {/* GHOST CARD */}
+      {/* GHOST CARD (Drag) — Glass style */}
       {draggingWorkout && dragState?.isDragging && (() => {
         const s = typeStyles[draggingWorkout.type] || typeStyles.rest;
         const cardEl = cardRefs.current[draggingWorkout.id];
         const w = cardEl ? cardEl.offsetWidth : 140;
-        const h = Math.max(58, draggingWorkout.durationMin * 1.6);
+        const h = Math.max(64, draggingWorkout.durationMin * 1.6);
         return (
           <div
             className={`
-               fixed z-50 rounded-xl p-3 border-l-[4px] shadow-2xl pointer-events-none flex flex-col justify-between
-               ${s.bg} ${s.text} ${s.border} border-l-current
+              fixed z-50 rounded-2xl p-3 pointer-events-none flex flex-col justify-between
+              backdrop-blur-xl bg-white/90 border shadow-2xl shadow-zinc-300/50
+              ${s.border}
             `}
             style={{
               left: dragState.currentX - w / 2,
               top: dragState.currentY - 30,
               width: w,
-              height: h,
-              transform: 'rotate(3deg) scale(1.05)',
+              minHeight: h,
+              transform: 'rotate(2deg) scale(1.05)',
             }}
           >
-             <div>
-                <span className="text-[9px] font-black uppercase tracking-widest opacity-60">{draggingWorkout.type}</span>
-                <h4 className="font-display font-bold text-sm leading-tight mt-1">{draggingWorkout.title}</h4>
-             </div>
-             <div className="flex items-center gap-1 text-[10px] font-mono opacity-80">
-                <Clock size={10} /> {draggingWorkout.duration}
-             </div>
+            <div className={`absolute top-0 left-3 right-3 h-[3px] rounded-b-full ${s.accent}`} />
+            <div className="mt-1">
+              <SportBadge type={draggingWorkout.type} />
+              <h4 className="font-display font-bold text-sm text-zinc-900 leading-tight mt-2">{draggingWorkout.title}</h4>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-400 mt-auto pt-2">
+              <Clock size={10} /> {draggingWorkout.duration}
+            </div>
           </div>
         );
       })()}
 
-      {/* BOUTON ADAPT */}
-      <button
+      {/* BOUTON ADAPT — Brand Gradient */}
+      <motion.button
+        whileTap={{ scale: 0.95 }}
         onClick={handleAdapt}
         disabled={isAdapting}
-        className="fixed bottom-24 right-6 md:bottom-10 md:right-10 px-5 py-4 bg-zinc-900 text-white rounded-2xl font-display font-bold shadow-2xl flex items-center gap-3 z-30 hover:bg-zinc-800 transition-all active:scale-95"
+        className="fixed bottom-24 right-6 md:bottom-10 md:right-10 px-5 py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-display font-bold shadow-2xl shadow-red-500/30 flex items-center gap-3 z-30 hover:shadow-red-500/40 transition-all"
       >
-        <Shuffle size={20} className={isAdapting ? 'animate-spin' : ''} />
-        {isAdapting ? 'Optimizing...' : 'Adapt Plan'}
-      </button>
+        <Shuffle size={18} className={isAdapting ? 'animate-spin' : ''} />
+        {isAdapting ? 'Optimisation...' : 'Adapter le Plan'}
+      </motion.button>
 
-      {/* OVERLAY & SLIDE OVER */}
+      {/* OVERLAY */}
       {selectedWorkout && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity" onClick={() => setSelectedWorkout(null)} />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+          onClick={() => setSelectedWorkout(null)}
+        />
       )}
 
+      {/* SLIDE OVER — Glass Panel */}
       <div className={`
-         fixed top-0 right-0 h-full w-full md:w-[450px] bg-white shadow-2xl z-50 p-8 overflow-y-auto flex flex-col transition-transform duration-300 ease-spring
-         ${selectedWorkout ? 'translate-x-0' : 'translate-x-full'}
+        fixed top-0 right-0 h-full w-full md:w-[480px]
+        backdrop-blur-xl bg-white/95 border-l border-white/60
+        shadow-2xl shadow-zinc-200/50 z-50 overflow-y-auto flex flex-col
+        transition-transform duration-300 ease-out
+        ${selectedWorkout ? 'translate-x-0' : 'translate-x-full'}
       `}>
         {selectedWorkout && (() => {
           const sw = selectedWorkout;
           const s = typeStyles[sw.type] || typeStyles.rest;
+          const Icon = s.icon;
           return (
-            <>
+            <div className="p-8 flex flex-col h-full">
+              {/* Close */}
               <button
-                 onClick={() => setSelectedWorkout(null)}
-                 className="absolute top-6 right-6 p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition"
+                onClick={() => setSelectedWorkout(null)}
+                className="absolute top-6 right-6 p-2.5 bg-zinc-100 rounded-xl hover:bg-zinc-200 transition"
               >
-                 <X size={20} />
+                <X size={18} />
               </button>
 
-              <div className="mt-8">
-                 <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${s.bg} ${s.text}`}>
-                    {sw.type}
-                 </span>
-                 <h2 className="text-3xl font-display font-black text-zinc-900 mt-4 leading-none">
-                    {sw.title}
-                 </h2>
-                 <div className="flex items-center gap-6 mt-6 text-zinc-500 font-mono text-xs font-bold">
-                    <span className="flex items-center gap-2"><Clock size={16} /> {sw.duration}</span>
-                    <span className="flex items-center gap-2"><Zap size={16} /> TSS: {sw.tss}</span>
-                 </div>
+              {/* Header */}
+              <div className="mt-6">
+                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl ${s.bg} border ${s.border}`}>
+                  <Icon size={14} className={s.text} />
+                  <span className={`text-[10px] font-mono font-bold tracking-widest ${s.text}`}>{s.label}</span>
+                </div>
+                <h2 className="text-3xl font-display font-extrabold text-zinc-900 mt-4 tracking-tight leading-none">
+                  {sw.title}
+                </h2>
+                <div className="flex items-center gap-4 mt-6">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-100">
+                    <Clock size={14} className="text-zinc-400" />
+                    <span className="font-mono font-bold text-sm text-zinc-700">{sw.duration}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-100">
+                    <Zap size={14} className="text-amber-500" />
+                    <span className="font-mono font-bold text-sm text-zinc-700">{sw.tss} TSS</span>
+                  </div>
+                </div>
               </div>
 
               {/* Détails Séance */}
-              <div className="mt-10 space-y-8 flex-1">
-                 <div className="relative pl-6 border-l-2 border-zinc-200">
-                    <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-emerald-400" />
-                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Warm Up</h3>
-                    <p className="font-display font-medium text-zinc-800">{sw.details?.warmup}</p>
-                 </div>
-
-                 <div className={`relative pl-6 border-l-2 ${s.text.replace('text', 'border')}`}>
-                    <div className={`absolute -left-[5px] top-0 w-2 h-2 rounded-full ${s.accent}`} />
-                    <h3 className={`text-xs font-bold uppercase tracking-widest mb-2 ${s.text}`}>Main Set</h3>
-                    <div className={`p-4 rounded-xl border ${s.bg} ${s.border}`}>
-                       <p className="font-display font-bold text-zinc-900 text-lg leading-tight">{sw.details?.main}</p>
+              <div className="mt-10 space-y-6 flex-1">
+                {/* Warm Up */}
+                {sw.details?.warmup && (
+                  <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <h3 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Warm Up</h3>
                     </div>
-                 </div>
+                    <p className="font-display font-medium text-zinc-700 text-sm">{sw.details.warmup}</p>
+                  </div>
+                )}
 
-                 <div className="relative pl-6 border-l-2 border-zinc-200">
-                    <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-400" />
-                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Cool Down</h3>
-                    <p className="font-display font-medium text-zinc-800">{sw.details?.cooldown}</p>
-                 </div>
+                {/* Main Set */}
+                {sw.details?.main && (
+                  <div className={`p-5 rounded-2xl border-2 ${s.border} ${s.bg}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={`w-2 h-2 rounded-full ${s.accent}`} />
+                      <h3 className={`text-[10px] font-bold uppercase tracking-widest ${s.text}`}>Main Set</h3>
+                    </div>
+                    <p className="font-display font-bold text-zinc-900 text-lg leading-snug">{sw.details.main}</p>
+                  </div>
+                )}
+
+                {/* Cool Down */}
+                {sw.details?.cooldown && (
+                  <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-400" />
+                      <h3 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Cool Down</h3>
+                    </div>
+                    <p className="font-display font-medium text-zinc-700 text-sm">{sw.details.cooldown}</p>
+                  </div>
+                )}
               </div>
 
-              {/* Footer */}
-              <div className="mt-8 pt-6 border-t border-zinc-100 flex gap-4">
-                 <button className="flex-1 py-4 bg-zinc-900 text-white font-display font-bold rounded-xl hover:bg-zinc-800 transition shadow-lg shadow-zinc-900/10">
-                    Start Workout
-                 </button>
-                 <button className="p-4 border border-zinc-200 rounded-xl hover:bg-zinc-50 text-zinc-500">
-                    <MoreHorizontal />
-                 </button>
+              {/* Footer — Primary button style du guide */}
+              <div className="mt-8 pt-6 border-t border-zinc-100 flex gap-3">
+                <button className="flex-1 py-4 bg-zinc-900 text-white font-display font-bold rounded-2xl hover:bg-zinc-800 transition shadow-lg shadow-zinc-900/10 flex items-center justify-center gap-2">
+                  <Activity size={18} />
+                  Démarrer
+                </button>
+                <button className="p-4 border border-zinc-200 rounded-2xl hover:bg-zinc-50 text-zinc-400 transition">
+                  <MoreHorizontal size={18} />
+                </button>
               </div>
-            </>
+            </div>
           );
         })()}
       </div>

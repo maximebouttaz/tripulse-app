@@ -78,10 +78,10 @@ export default function Dashboard() {
           <TriPulseLogo />
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-zinc-200">
-               <div className="text-right pr-2 border-r border-zinc-200">
+               <Link href="/races" className="text-right pr-2 border-r border-zinc-200 hover:opacity-70 transition-opacity">
                   <p className="text-[10px] font-bold text-zinc-400 uppercase">Prochaine Échéance</p>
                   <p className="font-display font-bold text-zinc-900 text-sm">Ironman Nice • J-42</p>
-               </div>
+               </Link>
                <div className="text-right pr-2 border-r border-zinc-200">
                   <p className="text-[10px] font-bold text-zinc-400 uppercase">Fitness (CTL)</p>
                   <p className="font-display font-bold text-zinc-900 text-sm">{profile ? Math.round(profile.ctl) : '—'} pts</p>
