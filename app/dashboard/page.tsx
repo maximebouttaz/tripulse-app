@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity, Zap, Heart, CloudRain, Wind,
-  Gauge
+  Gauge, Settings
 } from 'lucide-react';
+import Link from 'next/link';
 import { TriPulseLogo } from '@/components/TriPulseLogo';
 import type { AthleteProfile } from '@/lib/types';
 
@@ -39,7 +40,7 @@ function tsbLabel(tsb: number): { text: string; bgClass: string; textClass: stri
 }
 
 export default function Dashboard() {
-  const [profile, setProfile] = useState<AthleteProfile | null>(null);
+  const [profile, setProfile] = useState<(AthleteProfile & { athlete_photo?: string; athlete_firstname?: string }) | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,14 +76,27 @@ export default function Dashboard() {
         {/* HEADER AREA */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
           <TriPulseLogo />
-          <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-zinc-200">
-             <div className="text-right pr-2 border-r border-zinc-200">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase">Fitness (CTL)</p>
-                <p className="font-display font-bold text-zinc-900 text-sm">{profile ? Math.round(profile.ctl) : '—'} pts</p>
-             </div>
-             <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden border border-white">
-                <div className="w-full h-full bg-gradient-to-tr from-zinc-200 to-zinc-300" />
-             </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-zinc-200">
+               <div className="text-right pr-2 border-r border-zinc-200">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase">Prochaine Échéance</p>
+                  <p className="font-display font-bold text-zinc-900 text-sm">Ironman Nice • J-42</p>
+               </div>
+               <div className="text-right pr-2 border-r border-zinc-200">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase">Fitness (CTL)</p>
+                  <p className="font-display font-bold text-zinc-900 text-sm">{profile ? Math.round(profile.ctl) : '—'} pts</p>
+               </div>
+               <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden border border-white">
+                  {profile?.athlete_photo ? (
+                    <img src={profile.athlete_photo} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-zinc-200 to-zinc-300" />
+                  )}
+               </div>
+            </div>
+            <Link href="/settings" className="w-10 h-10 rounded-2xl bg-white/50 border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 transition">
+              <Settings size={18} className="text-zinc-500" />
+            </Link>
           </div>
         </header>
 

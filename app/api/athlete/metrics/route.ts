@@ -11,18 +11,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'athlete_id requis' }, { status: 400 });
   }
 
-  const { data: profile, error } = await supabase
-    .from('athlete_profiles')
-    .select('*')
-    .eq('athlete_id', athleteId)
-    .single();
+  const [profileRes, tokenRes] = await Promise.all([
+    supabase.from('athlete_profiles').select('*').eq('athlete_id', athleteId).single(),
+    supabase.from('strava_tokens').select('athlete_firstname, athlete_lastname, athlete_profile').eq('athlete_id', athleteId).single(),
+  ]);
 
-  if (error || !profile) {
+  if (profileRes.error || !profileRes.data) {
     return NextResponse.json(
       { error: 'Profil non trouvé. Lance d\'abord POST /api/athlete/assess.' },
       { status: 404 }
     );
   }
 
-  return NextResponse.json(profile);
+  return NextResponse.json({
+    ...profileRes.data,
+    athlete_firstname: tokenRes.data?.athlete_firstname ?? null,
+    athlete_lastname: tokenRes.data?.athlete_lastname ?? null,
+    athlete_photo: tokenRes.data?.athlete_profile ?? null,
+  });
 }

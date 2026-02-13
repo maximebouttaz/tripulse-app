@@ -73,6 +73,24 @@ function SettingsContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [stravaConnected, setStravaConnected] = useState(false);
   const [stravaMessage, setStravaMessage] = useState<string | null>(null);
+  const [athletePhoto, setAthletePhoto] = useState<string | null>(null);
+  const [athleteName, setAthleteName] = useState<{ first: string; last: string }>({ first: '', last: '' });
+
+  // Charger les données du profil (photo + nom Strava)
+  useEffect(() => {
+    fetch('/api/athlete/metrics?athlete_id=126239815')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && !data.error) {
+          if (data.athlete_photo) setAthletePhoto(data.athlete_photo);
+          if (data.athlete_firstname || data.athlete_lastname) {
+            setAthleteName({ first: data.athlete_firstname || '', last: data.athlete_lastname || '' });
+            setStravaConnected(true);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Vérifier si l'utilisateur vient de connecter Strava (retour du callback)
   useEffect(() => {
@@ -130,16 +148,20 @@ function SettingsContent() {
             <Section title="Profil Athlète" icon={User}>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 rounded-full bg-zinc-200 overflow-hidden border-2 border-white shadow-md">
-                   {/* Placeholder Avatar */}
-                   <div className="w-full h-full bg-gradient-to-tr from-zinc-300 to-zinc-400" />
+                   {athletePhoto ? (
+                     <img src={athletePhoto} alt="Avatar" className="w-full h-full object-cover" />
+                   ) : (
+                     <div className="w-full h-full bg-gradient-to-tr from-zinc-300 to-zinc-400" />
+                   )}
                 </div>
                 <div>
+                   {athletePhoto && <p className="text-xs text-zinc-500 mb-1">Photo Strava</p>}
                    <button className="text-xs font-bold text-brand-red hover:underline">Changer la photo</button>
                 </div>
               </div>
               <div className="flex gap-4 mb-4">
-                <InputGroup label="Prénom" value="Alex" />
-                <InputGroup label="Nom" value="D." />
+                <InputGroup label="Prénom" value={athleteName.first || 'Alex'} />
+                <InputGroup label="Nom" value={athleteName.last || 'D.'} />
               </div>
               <div className="flex gap-4">
                 <InputGroup label="Poids" value="72" unit="kg" type="number" />
@@ -150,14 +172,25 @@ function SettingsContent() {
             {/* 2. ZONES DE PERFORMANCE */}
             <Section title="Zones & Seuils" icon={Activity}>
               <div className="space-y-4">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Vélo</p>
                 <div className="flex gap-4">
-                  <InputGroup label="FTP (Vélo)" value="285" unit="w" type="number" />
-                  <InputGroup label="FTHR (Vélo)" value="172" unit="bpm" type="number" />
+                  <InputGroup label="FTP" value="285" unit="w" type="number" />
+                  <InputGroup label="LTHR" value="172" unit="bpm" type="number" />
                 </div>
                 <div className="h-px bg-zinc-100 my-2" />
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Course à pied</p>
                 <div className="flex gap-4">
-                  <InputGroup label="VMA (Course)" value="18.5" unit="km/h" type="number" />
-                  <InputGroup label="Seuil (Course)" value="168" unit="bpm" type="number" />
+                  <InputGroup label="VMA" value="18.5" unit="km/h" type="number" />
+                  <InputGroup label="LTHR" value="168" unit="bpm" type="number" />
+                </div>
+                <div className="flex gap-4">
+                  <InputGroup label="Allure Seuil" value="4:24" unit="/km" />
+                </div>
+                <div className="h-px bg-zinc-100 my-2" />
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Natation</p>
+                <div className="flex gap-4">
+                  <InputGroup label="CSS" value="1:46" unit="/100m" />
+                  <InputGroup label="FC Max" value="185" unit="bpm" type="number" />
                 </div>
                 <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-800 text-xs flex items-start gap-2">
                    <Shield size={14} className="mt-0.5 shrink-0" />
