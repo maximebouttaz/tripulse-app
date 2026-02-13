@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { refreshStravaToken, getStravaActivity, saveActivityToSupabase } from '@/lib/strava';
+import { assessAthlete } from '@/lib/athlete-assessment';
 
 // 1. GESTION DE LA VÉRIFICATION (GET)
 export async function GET(request: Request) {
@@ -70,8 +71,17 @@ async function processNewActivity(athleteId: number, activityId: number) {
     const saved = await saveActivityToSupabase(activity, athleteId);
     if (saved) {
       console.log(`[3/3] Activité ${activityId} sauvegardée avec succès !`);
+
+      // 4. Recalculer les métriques de l'athlète (CTL/ATL/TSB, zones...)
+      console.log(`[4/4] Mise à jour des métriques pour athlete ${athleteId}...`);
+      try {
+        await assessAthlete(athleteId);
+        console.log(`[4/4] Métriques mises à jour !`);
+      } catch (assessErr) {
+        console.error(`[4/4] Erreur mise à jour métriques:`, assessErr);
+      }
     } else {
-      console.error(`[3/3] Échec de la sauvegarde de l'activité ${activityId}`);
+      console.error(`[3/4] Échec de la sauvegarde de l'activité ${activityId}`);
     }
   } catch (error) {
     console.error(`Erreur traitement activité ${activityId}:`, error);
