@@ -117,3 +117,14 @@ export interface Race {
   website_url: string | null;
   finishers_url: string | null;
 }
+
+export interface AthleteRace {
+  id: number;
+  athlete_id: number;
+  race_id: number;
+  priority: 'A' | 'B' | 'C';
+  status: 'upcoming' | 'completed' | 'dns' | 'dnf';
+  notes: string | null;
+  created_at: string;
+  races: Race;
+}

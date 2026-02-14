@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Calendar, MapPin, Users, Mountain, Wind, Sun,
   Timer, Zap, Waves, Bike, Activity, Euro, Clock, ExternalLink,
-  Trophy,
+  Trophy, Plus, Check, X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Race } from '@/lib/types';
+
+// --- Priority config ---
+const PRIORITIES = [
+  { key: 'A', label: 'A-Race', desc: 'Objectif principal', color: 'bg-red-600', ring: 'ring-red-200' },
+  { key: 'B', label: 'B-Race', desc: 'Préparation', color: 'bg-amber-500', ring: 'ring-amber-200' },
+  { key: 'C', label: 'C-Race', desc: 'Découverte', color: 'bg-zinc-400', ring: 'ring-zinc-200' },
+] as const;
 
 // --- Helpers ---
 function formatDistance(meters: number | null): string {
@@ -53,6 +60,11 @@ export default function RaceDetailPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [targetWatts, setTargetWatts] = useState(200);
 
+  // Season state
+  const [inSeason, setInSeason] = useState<{ priority: string } | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     async function fetchRace() {
       const { data } = await supabase
@@ -61,11 +73,47 @@ export default function RaceDetailPage() {
         .eq('slug', slug)
         .single();
 
-      if (data) setRace(data as Race);
+      if (data) {
+        setRace(data as Race);
+        // Check if already in season
+        const { data: ar } = await supabase
+          .from('athlete_races')
+          .select('priority')
+          .eq('athlete_id', 126239815)
+          .eq('race_id', data.id)
+          .single();
+        if (ar) setInSeason({ priority: ar.priority });
+      }
       setLoading(false);
     }
     if (slug) fetchRace();
   }, [slug]);
+
+  async function addToSeason(priority: string) {
+    if (!race) return;
+    setSaving(true);
+    const { error } = await supabase.from('athlete_races').insert({
+      athlete_id: 126239815,
+      race_id: race.id,
+      priority,
+    });
+    if (!error) {
+      setInSeason({ priority });
+      setShowPicker(false);
+    }
+    setSaving(false);
+  }
+
+  async function removeFromSeason() {
+    if (!race) return;
+    setSaving(true);
+    await supabase.from('athlete_races')
+      .delete()
+      .eq('athlete_id', 126239815)
+      .eq('race_id', race.id);
+    setInSeason(null);
+    setSaving(false);
+  }
 
   const estimatedTime = () => {
     const bikeKm = race?.bike_distance ? race.bike_distance / 1000 : 180;
@@ -142,6 +190,71 @@ export default function RaceDetailPage() {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 md:p-10 -mt-6">
+
+        {/* ADD TO SEASON CTA */}
+        <div className="mb-6">
+          {inSeason ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-5 py-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                <Check size={16} className="text-emerald-600" />
+                <span className="text-sm font-display font-bold text-emerald-700">Dans ma saison</span>
+                <span className={`ml-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-white ${
+                  inSeason.priority === 'A' ? 'bg-red-600' : inSeason.priority === 'B' ? 'bg-amber-500' : 'bg-zinc-400'
+                }`}>
+                  {inSeason.priority}-Race
+                </span>
+              </div>
+              <button
+                onClick={removeFromSeason}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-3 bg-white border border-zinc-200 rounded-2xl text-xs font-bold text-zinc-500 hover:text-red-500 hover:border-red-200 transition"
+              >
+                <X size={14} /> Retirer
+              </button>
+            </div>
+          ) : showPicker ? (
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm"
+              >
+                <p className="text-sm font-display font-bold text-zinc-900 mb-4">Choisir la priorité :</p>
+                <div className="flex gap-3">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => addToSeason(p.key)}
+                      disabled={saving}
+                      className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-transparent hover:ring-2 ${p.ring} transition-all ${saving ? 'opacity-50' : ''}`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl ${p.color} flex items-center justify-center text-white font-bold text-sm`}>
+                        {p.key}
+                      </div>
+                      <span className="text-sm font-display font-bold text-zinc-900">{p.label}</span>
+                      <span className="text-[10px] text-zinc-400">{p.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowPicker(false)}
+                  className="mt-3 text-xs text-zinc-400 hover:text-zinc-600 font-bold transition"
+                >
+                  Annuler
+                </button>
+              </motion.div>
+            </AnimatePresence>
+          ) : (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowPicker(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-display font-bold text-sm shadow-lg hover:shadow-xl transition-shadow"
+            >
+              <Plus size={16} /> Ajouter à ma saison
+            </motion.button>
+          )}
+        </div>
 
         {/* TABS */}
         <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-zinc-200 mb-8 w-full md:w-auto md:inline-flex overflow-x-auto">

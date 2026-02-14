@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Heart, MapPin, Mountain, Waves, Bike, Activity,
-  Calendar, ChevronLeft, Euro,
+  Calendar, ChevronLeft, Euro, Check,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Race } from '@/lib/types';
@@ -57,7 +57,7 @@ function categoryColor(cat: string): string {
 }
 
 // --- Race Card ---
-function RaceCard({ race }: { race: Race }) {
+function RaceCard({ race, inSeason }: { race: Race; inSeason: boolean }) {
   return (
     <Link href={`/races/${race.slug}`}>
       <motion.div
@@ -66,12 +66,18 @@ function RaceCard({ race }: { race: Race }) {
       >
         {/* Image header */}
         <div className={`h-36 ${race.image_gradient || 'bg-gradient-to-br from-zinc-400 to-zinc-600'} relative`}>
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            className="absolute top-3 right-3 p-2 bg-white/40 backdrop-blur-sm rounded-full hover:bg-white/80 text-white hover:text-red-500 transition-all"
-          >
-            <Heart size={16} />
-          </button>
+          {inSeason ? (
+            <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500 text-white rounded-full text-[10px] font-bold">
+              <Check size={12} /> Ma saison
+            </div>
+          ) : (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              className="absolute top-3 right-3 p-2 bg-white/40 backdrop-blur-sm rounded-full hover:bg-white/80 text-white hover:text-red-500 transition-all"
+            >
+              <Heart size={16} />
+            </button>
+          )}
           <div className={`absolute bottom-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${categoryColor(race.category)}`}>
             {categoryLabel(race.category)}
           </div>
@@ -159,22 +165,26 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [seasonRaceIds, setSeasonRaceIds] = useState<Set<number>>(new Set());
 
-  // Fetch races
+  // Fetch races + season
   useEffect(() => {
-    async function fetchRaces() {
+    async function fetchData() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('races')
-        .select('*')
-        .order('date', { ascending: true });
+      const [racesRes, seasonRes] = await Promise.all([
+        supabase.from('races').select('*').order('date', { ascending: true }),
+        supabase.from('athlete_races').select('race_id').eq('athlete_id', 126239815),
+      ]);
 
-      if (!error && data) {
-        setRaces(data as Race[]);
+      if (!racesRes.error && racesRes.data) {
+        setRaces(racesRes.data as Race[]);
+      }
+      if (!seasonRes.error && seasonRes.data) {
+        setSeasonRaceIds(new Set(seasonRes.data.map((r: { race_id: number }) => r.race_id)));
       }
       setLoading(false);
     }
-    fetchRaces();
+    fetchData();
   }, []);
 
   // Filter
@@ -290,7 +300,7 @@ export default function ExplorePage() {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
               {filtered.map((race) => (
-                <RaceCard key={race.id} race={race} />
+                <RaceCard key={race.id} race={race} inSeason={seasonRaceIds.has(race.id)} />
               ))}
             </motion.div>
           </AnimatePresence>
