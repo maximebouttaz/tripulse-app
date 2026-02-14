@@ -5,16 +5,27 @@ import { motion } from 'framer-motion';
 import { Settings, GripVertical, Check } from 'lucide-react';
 import Link from 'next/link';
 import { TriPulseLogo } from '@/components/TriPulseLogo';
+import { supabase } from '@/lib/supabase';
 import { WIDGET_CONFIGS, DEFAULT_ORDER } from './widgets';
 import type { DashboardProfile } from './widgets';
 
 // --- CONSTANTS ---
 const STORAGE_KEY = 'tricoach-dashboard-order';
 const LONG_PRESS_MS = 500;
+const ATHLETE_ID = 126239815;
+
+function daysLeft(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+  if (diff < 0) return 'Terminé';
+  if (diff === 0) return "Aujourd'hui";
+  return `J-${diff}`;
+}
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nextRace, setNextRace] = useState<{ name: string; date: string | null } | null>(null);
 
   // --- DRAG & DROP STATE ---
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_ORDER);
@@ -47,11 +58,50 @@ export default function Dashboard() {
 
   // Fetch profile
   useEffect(() => {
-    fetch('/api/athlete/metrics?athlete_id=126239815')
+    fetch(`/api/athlete/metrics?athlete_id=${ATHLETE_ID}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data && !data.error) setProfile(data); })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, []);
+
+  // Fetch A-Race (or next upcoming race)
+  useEffect(() => {
+    async function fetchNextRace() {
+      // 1. Try A-Race first
+      const { data: aRace } = await supabase
+        .from('athlete_races')
+        .select('races(name, date)')
+        .eq('athlete_id', ATHLETE_ID)
+        .eq('priority', 'A')
+        .limit(1)
+        .single();
+
+      if (aRace?.races) {
+        const r = aRace.races as unknown as { name: string; date: string | null };
+        setNextRace({ name: r.name, date: r.date });
+        return;
+      }
+
+      // 2. Fallback: next upcoming race (any priority)
+      const today = new Date().toISOString().split('T')[0];
+      const { data: upcoming } = await supabase
+        .from('athlete_races')
+        .select('races(name, date)')
+        .eq('athlete_id', ATHLETE_ID)
+        .limit(10);
+
+      if (upcoming && upcoming.length > 0) {
+        const future = upcoming
+          .map(e => e.races as unknown as { name: string; date: string | null })
+          .filter(r => r?.date && r.date >= today)
+          .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        if (future.length > 0) {
+          setNextRace(future[0]);
+        }
+      }
+    }
+    fetchNextRace();
   }, []);
 
   // --- LONG PRESS HANDLERS ---
@@ -200,7 +250,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-zinc-200">
               <Link href="/races" className="text-right pr-2 border-r border-zinc-200 hover:opacity-70 transition-opacity">
                 <p className="text-[10px] font-bold text-zinc-400 uppercase">Prochaine Échéance</p>
-                <p className="font-display font-bold text-zinc-900 text-sm">Ironman Nice • J-42</p>
+                <p className="font-display font-bold text-zinc-900 text-sm">
+                  {nextRace ? `${nextRace.name} • ${daysLeft(nextRace.date)}` : 'Aucune course'}
+                </p>
               </Link>
               <div className="text-right pr-2 border-r border-zinc-200">
                 <p className="text-[10px] font-bold text-zinc-400 uppercase">Fitness (CTL)</p>

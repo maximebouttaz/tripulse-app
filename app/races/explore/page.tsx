@@ -57,7 +57,9 @@ function categoryColor(cat: string): string {
 }
 
 // --- Race Card ---
-function RaceCard({ race, inSeason }: { race: Race; inSeason: boolean }) {
+function RaceCard({ race, inSeason, onAdd }: { race: Race; inSeason: boolean; onAdd: (raceId: number, priority: string) => void }) {
+  const [showPicker, setShowPicker] = useState(false);
+
   return (
     <Link href={`/races/${race.slug}`}>
       <motion.div
@@ -71,12 +73,34 @@ function RaceCard({ race, inSeason }: { race: Race; inSeason: boolean }) {
               <Check size={12} /> Ma saison
             </div>
           ) : (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              className="absolute top-3 right-3 p-2 bg-white/40 backdrop-blur-sm rounded-full hover:bg-white/80 text-white hover:text-red-500 transition-all"
-            >
-              <Heart size={16} />
-            </button>
+            <div className="absolute top-3 right-3">
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowPicker(!showPicker); }}
+                className="p-2 bg-white/40 backdrop-blur-sm rounded-full hover:bg-white/80 text-white hover:text-red-500 transition-all"
+              >
+                <Heart size={16} />
+              </button>
+              {showPicker && (
+                <div
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  className="absolute top-11 right-0 bg-white rounded-xl shadow-xl border border-zinc-200 p-2 flex gap-1.5 z-20"
+                >
+                  {[
+                    { key: 'A', color: 'bg-red-600 hover:bg-red-700' },
+                    { key: 'B', color: 'bg-amber-500 hover:bg-amber-600' },
+                    { key: 'C', color: 'bg-zinc-400 hover:bg-zinc-500' },
+                  ].map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAdd(race.id, p.key); setShowPicker(false); }}
+                      className={`w-9 h-9 rounded-lg ${p.color} text-white text-xs font-bold transition-colors`}
+                    >
+                      {p.key}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           <div className={`absolute bottom-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${categoryColor(race.category)}`}>
             {categoryLabel(race.category)}
@@ -186,6 +210,17 @@ export default function ExplorePage() {
     }
     fetchData();
   }, []);
+
+  async function handleAdd(raceId: number, priority: string) {
+    const { error } = await supabase.from('athlete_races').insert({
+      athlete_id: 126239815,
+      race_id: raceId,
+      priority,
+    });
+    if (!error) {
+      setSeasonRaceIds((prev) => new Set([...prev, raceId]));
+    }
+  }
 
   // Filter
   const filtered = useMemo(() => {
@@ -300,7 +335,7 @@ export default function ExplorePage() {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
               {filtered.map((race) => (
-                <RaceCard key={race.id} race={race} inSeason={seasonRaceIds.has(race.id)} />
+                <RaceCard key={race.id} race={race} inSeason={seasonRaceIds.has(race.id)} onAdd={handleAdd} />
               ))}
             </motion.div>
           </AnimatePresence>
