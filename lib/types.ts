@@ -80,3 +80,40 @@ export interface AthleteProfile {
 }
 
 export type Discipline = 'swim' | 'bike' | 'run';
+
+export interface Race {
+  id: number;
+  slug: string;
+  name: string;
+  date: string | null;
+  location: string;
+  city: string;
+  department: string | null;
+  region: string | null;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+  discipline: string;
+  category: string;
+  swim_distance: number | null;
+  bike_distance: number | null;
+  run_distance: number | null;
+  total_distance: number | null;
+  bike_elevation: number | null;
+  run_elevation: number | null;
+  total_elevation: number | null;
+  price_euros: number | null;
+  max_participants: number | null;
+  time_limit_hours: number | null;
+  description: string | null;
+  tagline: string | null;
+  image_gradient: string | null;
+  avg_temp_celsius: number | null;
+  avg_water_temp_celsius: number | null;
+  avg_wind_kmh: number | null;
+  record_men: string | null;
+  record_women: string | null;
+  tags: string[] | null;
+  website_url: string | null;
+  finishers_url: string | null;
+}
