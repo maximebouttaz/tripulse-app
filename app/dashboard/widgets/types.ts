@@ -10,6 +10,8 @@ export interface WidgetProps {
   loading: boolean;
 }
 
+export type IntensityBlock = { zone: string; duration: number };
+
 export type Workout = {
   id: number;
   dateKey: string;
@@ -20,4 +22,14 @@ export type Workout = {
   tss: number;
   status: 'completed' | 'upcoming' | 'planned';
   details: { warmup: string; main: string; cooldown: string };
+  focus: string | null;
+  equipment: string[] | null;
+  targetZones: string | null;
+  coachTip: string | null;
+  purpose: string | null;
+  nutrition: string | null;
+  feelLegs: number;
+  feelCardio: number;
+  feelMental: number;
+  intensityBlocks: IntensityBlock[] | null;
 };

@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Clock, Zap, X, Shuffle, ChevronLeft, ChevronRight,
-  GripVertical, MoreHorizontal, Loader2, Activity,
-  Waves, Bike, CalendarDays
+  GripVertical, Loader2, Activity,
+  Waves, Bike, CalendarDays,
+  Play, Download, SlidersHorizontal, Target,
+  MessageCircle, Apple, Brain, Footprints, Heart, Wrench,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -51,6 +54,8 @@ function getWeekDays(weekOffset: number): { dayLabel: string; date: Date; dateKe
 }
 
 // --- TYPES ---
+type IntensityBlock = { zone: string; duration: number };
+
 type Workout = {
   id: number;
   dateKey: string;
@@ -61,6 +66,16 @@ type Workout = {
   tss: number;
   status: 'completed' | 'upcoming' | 'planned';
   details: { warmup: string; main: string; cooldown: string };
+  focus: string | null;
+  equipment: string[] | null;
+  targetZones: string | null;
+  coachTip: string | null;
+  purpose: string | null;
+  nutrition: string | null;
+  feelLegs: number;
+  feelCardio: number;
+  feelMental: number;
+  intensityBlocks: IntensityBlock[] | null;
 };
 
 function rowToWorkout(row: any): Workout {
@@ -78,6 +93,16 @@ function rowToWorkout(row: any): Workout {
       main: row.main_set || '',
       cooldown: row.cooldown || '',
     },
+    focus: row.focus || null,
+    equipment: row.equipment || null,
+    targetZones: row.target_zones || null,
+    coachTip: row.coach_tip || null,
+    purpose: row.purpose || null,
+    nutrition: row.nutrition || null,
+    feelLegs: row.feel_legs || 0,
+    feelCardio: row.feel_cardio || 0,
+    feelMental: row.feel_mental || 0,
+    intensityBlocks: row.intensity_blocks || null,
   };
 }
 
@@ -102,7 +127,16 @@ const SportBadge = ({ type }: { type: string }) => {
   );
 };
 
-export default function CalendarElitePage() {
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={null}>
+      <CalendarElitePage />
+    </Suspense>
+  );
+}
+
+function CalendarElitePage() {
+  const searchParams = useSearchParams();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
@@ -161,6 +195,16 @@ export default function CalendarElitePage() {
 
     fetchWorkouts();
   }, [weekDays]);
+
+  // --- AUTO-OPEN WORKOUT FROM URL PARAM ---
+  useEffect(() => {
+    const workoutId = searchParams.get('workoutId');
+    if (!workoutId || isLoading) return;
+    const found = workouts.find(w => w.id === Number(workoutId));
+    if (found) {
+      setSelectedWorkout(found);
+    }
+  }, [searchParams, workouts, isLoading]);
 
   // --- LOGIQUE DRAG & DROP ---
   const [dragState, setDragState] = useState<any>(null);
@@ -494,9 +538,9 @@ export default function CalendarElitePage() {
         />
       )}
 
-      {/* SLIDE OVER — Glass Panel */}
+      {/* SLIDE OVER — Premium Workout Detail */}
       <div className={`
-        fixed top-0 right-0 h-full w-full md:w-[480px]
+        fixed top-0 right-0 h-full w-full md:w-[520px]
         backdrop-blur-xl bg-white/95 border-l border-white/60
         shadow-2xl shadow-zinc-200/50 z-50 overflow-y-auto flex flex-col
         transition-transform duration-300 ease-out
@@ -506,81 +550,242 @@ export default function CalendarElitePage() {
           const sw = selectedWorkout;
           const s = typeStyles[sw.type] || typeStyles.rest;
           const Icon = s.icon;
-          return (
-            <div className="p-8 flex flex-col h-full">
-              {/* Close */}
-              <button
-                onClick={() => setSelectedWorkout(null)}
-                className="absolute top-6 right-6 p-2.5 bg-zinc-100 rounded-xl hover:bg-zinc-200 transition"
-              >
-                <X size={18} />
-              </button>
+          const hasFeel = sw.feelLegs > 0 || sw.feelCardio > 0 || sw.feelMental > 0;
+          const hasCoaching = sw.coachTip || sw.purpose || sw.nutrition;
 
-              {/* Header */}
-              <div className="mt-6">
-                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl ${s.bg} border ${s.border}`}>
-                  <Icon size={14} className={s.text} />
-                  <span className={`text-[10px] font-mono font-bold tracking-widest ${s.text}`}>{s.label}</span>
+          // Accent gradient per sport
+          const accentGradient: Record<string, string> = {
+            swim: 'from-cyan-500 to-cyan-600',
+            bike: 'from-red-500 to-rose-600',
+            run: 'from-amber-500 to-orange-500',
+            strength: 'from-purple-500 to-violet-600',
+          };
+          const gradient = accentGradient[sw.type] || 'from-zinc-500 to-zinc-600';
+
+          // Zone config for intensity chart
+          const zoneHeight: Record<string, number> = { Z1: 20, Z2: 40, Z3: 60, Z4: 80, Z5: 100 };
+          const zoneColor: Record<string, string> = { Z1: '#10b981', Z2: '#06b6d4', Z3: '#f59e0b', Z4: '#ef4444', Z5: '#e11d48' };
+
+          return (
+            <div className="flex flex-col h-full">
+
+              {/* ===== SECTION 1: HEADER SPORTIF ("The Glance") ===== */}
+              <div className={`p-8 pb-6 ${s.bg} bg-opacity-20 border-b ${s.border}`}>
+                {/* Close */}
+                <button
+                  onClick={() => setSelectedWorkout(null)}
+                  className="absolute top-6 right-6 p-2.5 bg-white/80 backdrop-blur rounded-xl hover:bg-white transition z-10"
+                >
+                  <X size={18} />
+                </button>
+
+                {/* Badges row */}
+                <div className="flex items-center gap-2 flex-wrap mt-4">
+                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl ${s.bg} border ${s.border}`}>
+                    <Icon size={14} className={s.text} />
+                    <span className={`text-[10px] font-mono font-bold tracking-widest ${s.text}`}>{s.label}</span>
+                  </div>
+                  {sw.focus && (
+                    <span className="px-3 py-1.5 rounded-xl bg-zinc-100 border border-zinc-200 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
+                      {sw.focus}
+                    </span>
+                  )}
                 </div>
-                <h2 className="text-3xl font-display font-extrabold text-zinc-900 mt-4 tracking-tight leading-none">
+
+                {/* Title */}
+                <h2 className="text-3xl font-display font-extrabold text-zinc-900 mt-4 tracking-tight leading-tight">
                   {sw.title}
                 </h2>
-                <div className="flex items-center gap-4 mt-6">
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-100">
+
+                {/* KPIs row */}
+                <div className="flex items-center gap-3 mt-5 flex-wrap">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/70 border border-zinc-100">
                     <Clock size={14} className="text-zinc-400" />
                     <span className="font-mono font-bold text-sm text-zinc-700">{sw.duration}</span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-100">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/70 border border-zinc-100">
                     <Zap size={14} className="text-amber-500" />
                     <span className="font-mono font-bold text-sm text-zinc-700">{sw.tss} TSS</span>
                   </div>
+                  {sw.targetZones && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/70 border border-zinc-100">
+                      <Target size={14} className={s.text} />
+                      <span className="font-mono font-bold text-sm text-zinc-700">{sw.targetZones}</span>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Détails Séance */}
-              <div className="mt-10 space-y-6 flex-1">
-                {/* Warm Up */}
-                {sw.details?.warmup && (
-                  <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                      <h3 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Warm Up</h3>
-                    </div>
-                    <p className="font-display font-medium text-zinc-700 text-sm">{sw.details.warmup}</p>
-                  </div>
-                )}
-
-                {/* Main Set */}
-                {sw.details?.main && (
-                  <div className={`p-5 rounded-2xl border-2 ${s.border} ${s.bg}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className={`w-2 h-2 rounded-full ${s.accent}`} />
-                      <h3 className={`text-[10px] font-bold uppercase tracking-widest ${s.text}`}>Main Set</h3>
-                    </div>
-                    <p className="font-display font-bold text-zinc-900 text-lg leading-snug">{sw.details.main}</p>
-                  </div>
-                )}
-
-                {/* Cool Down */}
-                {sw.details?.cooldown && (
-                  <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-400" />
-                      <h3 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Cool Down</h3>
-                    </div>
-                    <p className="font-display font-medium text-zinc-700 text-sm">{sw.details.cooldown}</p>
+                {/* Equipment */}
+                {sw.equipment && sw.equipment.length > 0 && (
+                  <div className="flex items-center gap-2 mt-4 text-xs text-zinc-500">
+                    <Wrench size={12} className="text-zinc-400" />
+                    <span className="font-display font-medium">{sw.equipment.join(' \u00b7 ')}</span>
                   </div>
                 )}
               </div>
 
-              {/* Footer — Primary button style du guide */}
-              <div className="mt-8 pt-6 border-t border-zinc-100 flex gap-3">
-                <button className="flex-1 py-4 bg-zinc-900 text-white font-display font-bold rounded-2xl hover:bg-zinc-800 transition shadow-lg shadow-zinc-900/10 flex items-center justify-center gap-2">
-                  <Activity size={18} />
-                  Démarrer
+              {/* ===== SCROLLABLE CONTENT ===== */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+
+                {/* ===== SECTION 2: WORKOUT PROFILE (Intensity Chart) ===== */}
+                {sw.intensityBlocks && sw.intensityBlocks.length > 0 && (() => {
+                  const blocks = sw.intensityBlocks!;
+                  const totalDur = blocks.reduce((sum, b) => sum + b.duration, 0);
+                  return (
+                    <div>
+                      <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Profil d&apos;intensit\u00e9</h3>
+                      <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-3">
+                        <svg viewBox={`0 0 ${totalDur} 110`} className="w-full h-24" preserveAspectRatio="none">
+                          {blocks.map((block, i) => {
+                            const x = blocks.slice(0, i).reduce((sum, b) => sum + b.duration, 0);
+                            const h = zoneHeight[block.zone] || 30;
+                            return (
+                              <rect
+                                key={i}
+                                x={x + 0.5}
+                                y={110 - h}
+                                width={Math.max(block.duration - 1, 1)}
+                                height={h}
+                                fill={zoneColor[block.zone] || '#a1a1aa'}
+                                rx={3}
+                              />
+                            );
+                          })}
+                        </svg>
+                        <div className="flex justify-between mt-2 px-1">
+                          {['Z1', 'Z2', 'Z3', 'Z4', 'Z5'].map(z => (
+                            <div key={z} className="flex items-center gap-1">
+                              <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: zoneColor[z] }} />
+                              <span className="text-[9px] font-mono text-zinc-400">{z}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ===== SECTION 3: STRUCTURE ("The Recipe") ===== */}
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Structure</h3>
+
+                  {sw.details?.warmup && (
+                    <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Warm Up</h4>
+                      </div>
+                      <p className="font-display font-medium text-zinc-700 text-sm leading-relaxed">{sw.details.warmup}</p>
+                    </div>
+                  )}
+
+                  {sw.details?.main && (
+                    <div className={`p-5 rounded-2xl border-2 ${s.border} ${s.bg}`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={`w-2 h-2 rounded-full ${s.accent}`} />
+                        <h4 className={`text-[10px] font-bold uppercase tracking-widest ${s.text}`}>Main Set</h4>
+                      </div>
+                      <p className="font-display font-bold text-zinc-900 text-lg leading-snug">{sw.details.main}</p>
+                    </div>
+                  )}
+
+                  {sw.details?.cooldown && (
+                    <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Cool Down</h4>
+                      </div>
+                      <p className="font-display font-medium text-zinc-700 text-sm leading-relaxed">{sw.details.cooldown}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* ===== SECTION 4: COACHING ("The Why") ===== */}
+                {hasCoaching && (
+                  <div className="space-y-3">
+                    <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Coaching</h3>
+
+                    {/* Coach's Tip */}
+                    {sw.coachTip && (
+                      <div className="p-5 rounded-2xl bg-zinc-900 text-white">
+                        <div className="flex items-center gap-2 mb-3">
+                          <MessageCircle size={14} className="text-zinc-400" />
+                          <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Coach&apos;s Tip</h4>
+                        </div>
+                        <p className="font-display font-medium text-zinc-200 text-sm leading-relaxed italic">
+                          &ldquo;{sw.coachTip}&rdquo;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Purpose */}
+                    {sw.purpose && (
+                      <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target size={14} className="text-zinc-500" />
+                          <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pourquoi cette s\u00e9ance ?</h4>
+                        </div>
+                        <p className="font-display font-medium text-zinc-700 text-sm leading-relaxed">{sw.purpose}</p>
+                      </div>
+                    )}
+
+                    {/* Nutrition */}
+                    {sw.nutrition && (
+                      <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Apple size={14} className="text-amber-600" />
+                          <h4 className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Nutrition</h4>
+                        </div>
+                        <p className="font-display font-medium text-zinc-700 text-sm leading-relaxed">{sw.nutrition}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ===== SECTION 5: FEEL CHECK ("Prediction de Fatigue") ===== */}
+                {hasFeel && (
+                  <div>
+                    <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4">Comment \u00e7a va piquer ?</h3>
+                    <div className="space-y-3 p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+                      {[
+                        { label: 'Jambes', icon: Footprints, value: sw.feelLegs },
+                        { label: 'Souffle', icon: Heart, value: sw.feelCardio },
+                        { label: 'Mental', icon: Brain, value: sw.feelMental },
+                      ].filter(f => f.value > 0).map(feel => {
+                        const barColor = feel.value <= 3 ? 'bg-emerald-500' : feel.value <= 6 ? 'bg-amber-500' : 'bg-red-500';
+                        const FeelIcon = feel.icon;
+                        return (
+                          <div key={feel.label} className="flex items-center gap-3">
+                            <FeelIcon size={14} className="text-zinc-400 shrink-0" />
+                            <span className="text-xs font-bold text-zinc-500 w-14 shrink-0">{feel.label}</span>
+                            <div className="flex-1 h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${feel.value * 10}%` }}
+                                transition={{ duration: 0.6, delay: 0.2 }}
+                                className={`h-full rounded-full ${barColor}`}
+                              />
+                            </div>
+                            <span className="text-xs font-mono font-bold text-zinc-400 w-8 text-right">{feel.value}/10</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ===== SECTION 6: FOOTER ACTIONS ===== */}
+              <div className="p-6 pt-4 border-t border-zinc-100 flex gap-3 shrink-0">
+                <button className={`flex-1 py-4 bg-gradient-to-r ${gradient} text-white font-display font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 hover:shadow-xl transition-shadow`}>
+                  <Play size={18} fill="white" />
+                  Push to Garmin
                 </button>
-                <button className="p-4 border border-zinc-200 rounded-2xl hover:bg-zinc-50 text-zinc-400 transition">
-                  <MoreHorizontal size={18} />
+                <button className="p-4 border border-zinc-200 rounded-2xl hover:bg-zinc-50 text-zinc-400 transition" title="Exporter .fit / .zwo">
+                  <Download size={18} />
+                </button>
+                <button className="p-4 border border-zinc-200 rounded-2xl hover:bg-zinc-50 text-zinc-400 transition" title="Ajuster l'intensit\u00e9">
+                  <SlidersHorizontal size={18} />
                 </button>
               </div>
             </div>

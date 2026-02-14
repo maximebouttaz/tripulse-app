@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity, Waves, Bike, Zap, Clock, Moon,
@@ -69,6 +70,16 @@ function rowToWorkout(row: Record<string, unknown>): Workout {
       main: (row.main_set as string) || '',
       cooldown: (row.cooldown as string) || '',
     },
+    focus: (row.focus as string) || null,
+    equipment: (row.equipment as string[]) || null,
+    targetZones: (row.target_zones as string) || null,
+    coachTip: (row.coach_tip as string) || null,
+    purpose: (row.purpose as string) || null,
+    nutrition: (row.nutrition as string) || null,
+    feelLegs: (row.feel_legs as number) || 0,
+    feelCardio: (row.feel_cardio as number) || 0,
+    feelMental: (row.feel_mental as number) || 0,
+    intensityBlocks: (row.intensity_blocks as Workout['intensityBlocks']) || null,
   };
 }
 
@@ -84,6 +95,7 @@ function formatToday(): string {
 export const heroClassName = 'md:col-span-2 md:row-span-2 relative overflow-hidden group border-zinc-300/50 shadow-xl';
 
 export function HeroWidget({ }: WidgetProps) {
+  const router = useRouter();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [workoutLoading, setWorkoutLoading] = useState(true);
 
@@ -192,60 +204,66 @@ export function HeroWidget({ }: WidgetProps) {
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 flex flex-col h-full"
       >
-        {/* Header: Badge + Date */}
-        <div className="flex justify-between items-start mb-5">
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${theme.accentBg} border ${theme.border}`}>
-            <SportIcon size={14} className={theme.text} />
-            <span className={`text-[10px] font-bold ${theme.text} tracking-widest uppercase`}>{theme.label}</span>
-          </div>
-          <p className="text-zinc-400 font-mono text-xs">{todayLabel}</p>
-        </div>
-
-        {/* Title */}
-        <h2 className="text-3xl font-display font-extrabold tracking-tight text-zinc-900 leading-tight mb-4">
-          {workout.title}
-        </h2>
-
-        {/* Metrics: Duration + TSS */}
-        <div className="flex gap-6 mb-5">
-          <div className="flex items-center gap-2">
-            <Timer size={14} className="text-zinc-400" />
-            <span className="font-mono font-bold text-zinc-900">{workout.duration}</span>
-          </div>
-          {workout.tss > 0 && (
-            <div className="flex items-center gap-2">
-              <Flame size={14} className={theme.text} />
-              <span className="font-mono font-bold text-zinc-900">{workout.tss}<span className="text-xs text-zinc-400 ml-1">TSS</span></span>
+        {/* Clickable zone → calendar with workout details */}
+        <div
+          className="flex-1 flex flex-col cursor-pointer"
+          onClick={() => router.push(`/calendar?workoutId=${workout.id}`)}
+        >
+          {/* Header: Badge + Date */}
+          <div className="flex justify-between items-start mb-5">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${theme.accentBg} border ${theme.border}`}>
+              <SportIcon size={14} className={theme.text} />
+              <span className={`text-[10px] font-bold ${theme.text} tracking-widest uppercase`}>{theme.label}</span>
             </div>
-          )}
-        </div>
+            <p className="text-zinc-400 font-mono text-xs">{todayLabel}</p>
+          </div>
 
-        {/* Structure Blocks */}
-        <div className="space-y-2 flex-1">
-          <AnimatePresence>
-            {structureBlocks.map((block, index) => (
-              <motion.div
-                key={block.key}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className={`
-                  rounded-2xl px-4 py-3
-                  ${block.isMain
-                    ? `${theme.bg} border-2 ${theme.border}`
-                    : 'bg-zinc-50/50 border border-zinc-100'
-                  }
-                `}
-              >
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${block.isMain ? theme.text : 'text-zinc-400'}`}>
-                  {block.label}
-                </p>
-                <p className={`text-sm leading-snug ${block.isMain ? 'font-bold text-zinc-900' : 'text-zinc-600'}`}>
-                  {block.text}
-                </p>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          {/* Title */}
+          <h2 className="text-3xl font-display font-extrabold tracking-tight text-zinc-900 leading-tight mb-4">
+            {workout.title}
+          </h2>
+
+          {/* Metrics: Duration + TSS */}
+          <div className="flex gap-6 mb-5">
+            <div className="flex items-center gap-2">
+              <Timer size={14} className="text-zinc-400" />
+              <span className="font-mono font-bold text-zinc-900">{workout.duration}</span>
+            </div>
+            {workout.tss > 0 && (
+              <div className="flex items-center gap-2">
+                <Flame size={14} className={theme.text} />
+                <span className="font-mono font-bold text-zinc-900">{workout.tss}<span className="text-xs text-zinc-400 ml-1">TSS</span></span>
+              </div>
+            )}
+          </div>
+
+          {/* Structure Blocks */}
+          <div className="space-y-2 flex-1">
+            <AnimatePresence>
+              {structureBlocks.map((block, index) => (
+                <motion.div
+                  key={block.key}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`
+                    rounded-2xl px-4 py-3
+                    ${block.isMain
+                      ? `${theme.bg} border-2 ${theme.border}`
+                      : 'bg-zinc-50/50 border border-zinc-100'
+                    }
+                  `}
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${block.isMain ? theme.text : 'text-zinc-400'}`}>
+                    {block.label}
+                  </p>
+                  <p className={`text-sm leading-snug ${block.isMain ? 'font-bold text-zinc-900' : 'text-zinc-600'}`}>
+                    {block.text}
+                  </p>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Buttons */}
@@ -258,7 +276,7 @@ export function HeroWidget({ }: WidgetProps) {
             Push to Garmin
           </motion.button>
           <Link
-            href="/calendar"
+            href={`/calendar?workoutId=${workout.id}`}
             className="px-4 py-3 bg-zinc-100 hover:bg-zinc-200 rounded-2xl text-xs font-display font-bold text-zinc-600 transition-colors flex items-center gap-2"
           >
             En savoir plus
