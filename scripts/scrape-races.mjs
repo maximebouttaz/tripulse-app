@@ -20,6 +20,30 @@ const TRI_KEYWORDS = [
   'norseman', 'challenge-roth', 'swimrun',
 ];
 
+// Tag translation: Finishers English → French labels
+const TAG_MAP = {
+  'seaside': 'Bord de mer',
+  'mountain': 'Montagne',
+  'off-road': 'Chemins',
+  'capitals-big-cities': 'Grande ville',
+  'city': 'Ville',
+  'point-to-point': 'Point à point',
+  'history': 'Historique',
+  'sand': 'Sable',
+  'forest': 'Forêt',
+  'lakes-ponds': 'Lac',
+  'night': 'Nocturne',
+  'island': 'Île',
+  'vineyard': 'Vignoble',
+  'desert': 'Désert',
+  'snow': 'Neige',
+  'urban': 'Urbain',
+  'flat': 'Plat',
+  'hilly': 'Vallonné',
+  'loop': 'Boucle',
+  'relay': 'Relais',
+};
+
 // Country code → French name
 const COUNTRY_MAP = {
   FR: 'France', ES: 'Espagne', IT: 'Italie', DE: 'Allemagne',
@@ -94,6 +118,60 @@ async function fetchPage(url) {
     clearTimeout(timeout);
     return null;
   }
+}
+
+// Remove control characters that break PostgreSQL JSON parsing
+function sanitizeText(text) {
+  if (!text) return null;
+  // Remove NUL bytes and other control chars (keep \n and \t)
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
+// Strip HTML tags and clean text
+function stripHtml(html) {
+  if (!html) return null;
+  const cleaned = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return sanitizeText(cleaned);
+}
+
+// Extract price from FAQ entries
+function extractPriceFromFaq(faq) {
+  if (!faq || !Array.isArray(faq)) return null;
+  for (const entry of faq) {
+    const title = (entry.title || '').toLowerCase();
+    const content = stripHtml(entry.content) || '';
+    if (title.includes('tarif') || title.includes('prix') || title.includes('inscription') || title.includes('price')) {
+      const match = content.match(/([\d]+(?:[.,]\d+)?)\s*€/);
+      if (match) return Math.round(parseFloat(match[1].replace(',', '.')));
+    }
+  }
+  return null;
+}
+
+// Extract time limit from FAQ entries
+function extractTimeLimitFromFaq(faq) {
+  if (!faq || !Array.isArray(faq)) return null;
+  for (const entry of faq) {
+    const title = (entry.title || '').toLowerCase();
+    const content = stripHtml(entry.content) || '';
+    if (title.includes('barrière') || title.includes('limite') || title.includes('cut') || title.includes('temps')) {
+      const match = content.match(/(\d{1,2})\s*h(?:eures?)?/i);
+      if (match) return parseInt(match[1]);
+    }
+  }
+  return null;
 }
 
 function guessCategory(swim, bike, run, name) {
@@ -229,16 +307,35 @@ function parseRaceDetail(html, slug) {
   // --- Elevation ---
   const totalElevation = mainRace?.elevationGain || null;
 
-  // --- Price ---
-  const price = mainRace?.minPrice || null;
+  // --- Price: structured data first, then FAQ fallback ---
+  const price = mainRace?.minPrice || extractPriceFromFaq(event?.faq) || null;
 
-  // --- Tags ---
-  const tags = event?.tags?.length > 0 ? event.tags : null;
+  // --- Time limit from FAQ ---
+  const timeLimit = extractTimeLimitFromFaq(event?.faq) || null;
+
+  // --- Description from longDescription (strip HTML) ---
+  let description = stripHtml(event?.longDescription);
+  // Trim to max 800 chars for DB storage (emoji-safe: avoid cutting surrogate pairs)
+  if (description && description.length > 800) {
+    let end = 797;
+    // If we'd cut in the middle of a surrogate pair, step back one char
+    const code = description.charCodeAt(end - 1);
+    if (code >= 0xD800 && code <= 0xDBFF) end--;
+    description = description.slice(0, end) + '...';
+  }
+
+  // --- Tags: translate to French ---
+  let tags = null;
+  if (event?.tags?.length > 0) {
+    tags = event.tags
+      .map(t => TAG_MAP[t] || null)
+      .filter(Boolean);
+    if (tags.length === 0) tags = null;
+  }
 
   // --- Website URL ---
   let websiteUrl = null;
   if (event?.links?.website) {
-    // Links are relative: /external?url=encoded_url&...
     const urlParam = event.links.website.match(/url=([^&]+)/);
     if (urlParam) {
       try { websiteUrl = decodeURIComponent(urlParam[1]); } catch {}
@@ -248,41 +345,39 @@ function parseRaceDetail(html, slug) {
   // --- Category ---
   const category = guessCategory(swim, bike, run, name);
 
-  return {
+  // Build race object, only including non-null fields
+  // This prevents overwriting existing rich data with nulls
+  const race = {
     slug: event?.slug || slug,
     name,
     date,
     location: city ? `${city}, ${countryName}` : countryName,
     city,
-    department,
     region,
     country: countryName,
-    latitude,
-    longitude,
     discipline: mainRace?.discipline || 'triathlon',
     category,
-    swim_distance: swim,
-    bike_distance: bike,
-    run_distance: run,
-    total_distance: totalDistance,
-    bike_elevation: null,
-    run_elevation: null,
-    total_elevation: totalElevation,
-    price_euros: price,
-    max_participants: null,
-    time_limit_hours: null,
-    description: null,
-    tagline: event?.subtitle || null,
     image_gradient: pickGradient(category),
-    avg_temp_celsius: null,
-    avg_water_temp_celsius: null,
-    avg_wind_kmh: null,
-    record_men: null,
-    record_women: null,
-    tags,
-    website_url: websiteUrl,
     finishers_url: `${BASE}/course/${event?.slug || slug}`,
   };
+
+  // Only set fields that have actual data (don't overwrite with null)
+  if (department) race.department = department;
+  if (latitude) race.latitude = latitude;
+  if (longitude) race.longitude = longitude;
+  if (swim) race.swim_distance = swim;
+  if (bike) race.bike_distance = bike;
+  if (run) race.run_distance = run;
+  if (totalDistance) race.total_distance = totalDistance;
+  if (totalElevation) race.total_elevation = totalElevation;
+  if (price) race.price_euros = price;
+  if (timeLimit) race.time_limit_hours = timeLimit;
+  if (description) race.description = description;
+  if (event?.subtitle) race.tagline = sanitizeText(event.subtitle);
+  if (tags) race.tags = tags;
+  if (websiteUrl) race.website_url = websiteUrl;
+
+  return race;
 }
 
 // --- Step 4: Scrape all races ---
@@ -353,6 +448,19 @@ async function scrape() {
 
     if (error) {
       console.error(`  Batch ${Math.floor(i / BATCH_SIZE) + 1} error:`, error.message);
+      // Fallback: try one by one to identify problematic races
+      console.log(`  → Retrying batch one-by-one...`);
+      for (const race of batch) {
+        const { data: d, error: e } = await supabase
+          .from('races')
+          .upsert(race, { onConflict: 'slug' })
+          .select('id, slug');
+        if (e) {
+          console.error(`    ✗ ${race.slug}: ${e.message}`);
+        } else {
+          inserted += d.length;
+        }
+      }
     } else {
       inserted += data.length;
       console.log(`  Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.length} races upserted`);
