@@ -127,7 +127,7 @@ def scrape(year: Optional[int] = None) -> list[dict]:
 
 def _parse_event(ev, year: int) -> Optional[dict]:
     """Parse un élément <a class='blocEvent'>."""
-    href = ev.get("href", "").strip()
+    href = re.sub(r'[\n\r\t\s]', '', ev.get("href", ""))
     if not href:
         return None
 
