@@ -110,6 +110,10 @@ def upsert_races(supabase_client, races: list[dict]) -> dict:
     stats = {"inserted": 0, "updated": 0, "errors": 0}
 
     for race in races:
+        # Nettoyer les URLs (supprimer les whitespace/newlines parasites)
+        if race.get("website_url"):
+            race["website_url"] = race["website_url"].strip()
+
         try:
             # Vérifier si la course existe déjà
             existing = (
