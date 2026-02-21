@@ -1,0 +1,81 @@
+name: Sync Triathlon Races
+
+on:
+  # Chaque lundi à 6h00 UTC (8h00 heure de Paris)
+  schedule:
+    - cron: "0 6 * * 1"
+
+  # Déclenchement manuel depuis GitHub Actions → "Run workflow"
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Sources à scraper (séparées par des espaces, vide = toutes)"
+        required: false
+        default: ""
+      year:
+        description: "Année à scraper (vide = année en cours)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run (afficher sans écrire en base)"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  sync:
+    name: Scrape & Sync races
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Build sync command
+        id: build_cmd
+        run: |
+          CMD="python scripts/sync.py"
+
+          # Sources
+          if [ -n "${{ github.event.inputs.sources }}" ]; then
+            CMD="$CMD --sources ${{ github.event.inputs.sources }}"
+          fi
+
+          # Année
+          if [ -n "${{ github.event.inputs.year }}" ]; then
+            CMD="$CMD --year ${{ github.event.inputs.year }}"
+          fi
+
+          # Dry run
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            CMD="$CMD --dry-run"
+          fi
+
+          echo "cmd=$CMD" >> $GITHUB_OUTPUT
+          echo "Commande : $CMD"
+
+      - name: Run sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: ${{ steps.build_cmd.outputs.cmd }}
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs-${{ github.run_id }}
+          path: |
+            scripts/*.log
+          retention-days: 7

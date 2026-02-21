@@ -1,65 +1,200 @@
-import Image from "next/image";
+import Link from 'next/link';
+import { Search, ArrowRight, Waves, Bike, Activity, Trophy } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import type { Race } from '@/lib/types';
+import RaceCard from '@/components/RaceCard';
+import CTABanner from '@/components/CTABanner';
 
-export default function Home() {
+// ISR: revalidate every day
+export const revalidate = 86400;
+
+// Category stats for the homepage
+const CATEGORY_SECTIONS: {
+  key: string;
+  label: string;
+  desc: string;
+  gradient: string;
+  categories: string[];
+}[] = [
+  { key: 'sprint', label: 'Sprint', desc: 'Découvre le triathlon sur format court', gradient: 'from-amber-600 to-yellow-500', categories: ['XS', 'S'] },
+  { key: 'olympic', label: 'Olympique', desc: 'Le format classique, 51.5km', gradient: 'from-emerald-600 to-teal-500', categories: ['M'] },
+  { key: 'half', label: 'Half / 70.3', desc: 'Monte en distance avec le format 70.3', gradient: 'from-blue-600 to-cyan-500', categories: ['L', '70.3'] },
+  { key: 'full', label: 'Ironman / XL', desc: 'Le graal : longue distance et Ironman', gradient: 'from-red-600 to-orange-500', categories: ['XL', 'Ironman'] },
+];
+
+export default async function HomePage() {
+  // Fetch popular races (with most data) and category counts
+  const { data: allRaces } = await supabase
+    .from('races')
+    .select('*')
+    .order('date', { ascending: true });
+
+  const races = (allRaces || []) as Race[];
+
+  // Pick 6 "popular" races: prefer those with description, records, and weather data
+  const popular = [...races]
+    .filter(r => r.description && r.avg_temp_celsius && r.date)
+    .sort((a, b) => {
+      const scoreA = (a.record_men ? 1 : 0) + (a.record_women ? 1 : 0) + (a.max_participants ? 1 : 0) + (a.total_elevation ? 1 : 0);
+      const scoreB = (b.record_men ? 1 : 0) + (b.record_women ? 1 : 0) + (b.max_participants ? 1 : 0) + (b.total_elevation ? 1 : 0);
+      return scoreB - scoreA;
+    })
+    .slice(0, 6);
+
+  // Category counts
+  const categoryCounts: Record<string, number> = {};
+  for (const r of races) {
+    categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div>
+      {/* HERO */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 via-zinc-950 to-zinc-950" />
+        <div className="relative max-w-7xl mx-auto px-6 md:px-10 py-24 md:py-36">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center">
+                <Trophy size={20} className="text-white" />
+              </div>
+              <span className="text-sm font-bold text-zinc-500 uppercase tracking-wider">TriRace</span>
+            </div>
+
+            <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight mb-6">
+              Trouve ta prochaine{' '}
+              <span className="bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent">
+                course triathlon
+              </span>
+            </h1>
+
+            <p className="text-lg text-zinc-400 mb-10 max-w-xl leading-relaxed">
+              Explore {races.length}+ courses en France et en Europe. Distances, dénivelé, météo, records — toutes les infos pour choisir ta course.
+            </p>
+
+            {/* Search CTA */}
+            <Link
+              href="/courses"
+              className="group inline-flex items-center gap-3 px-8 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-zinc-700 hover:bg-zinc-800 transition-all"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <Search size={20} className="text-zinc-500" />
+              <span className="text-zinc-500 group-hover:text-zinc-300 transition">Chercher une course, ville, région...</span>
+              <ArrowRight size={16} className="text-zinc-600 group-hover:text-white transition ml-4" />
+            </Link>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-6 mt-16 max-w-lg">
+            <div>
+              <p className="text-3xl font-mono font-bold text-white">{races.length}+</p>
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mt-1">Courses</p>
+            </div>
+            <div>
+              <p className="text-3xl font-mono font-bold text-white">
+                {new Set(races.map(r => r.country)).size}
+              </p>
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mt-1">Pays</p>
+            </div>
+            <div>
+              <p className="text-3xl font-mono font-bold text-white">
+                {new Set(races.map(r => r.category)).size}
+              </p>
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mt-1">Formats</p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </section>
+
+      {/* POPULAR RACES */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 py-16">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">Courses populaires</h2>
+            <p className="text-sm text-zinc-500">Les incontournables du calendrier triathlon</p>
+          </div>
+          <Link
+            href="/courses"
+            className="flex items-center gap-2 text-sm font-bold text-red-400 hover:text-red-300 transition"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Voir toutes <ArrowRight size={14} />
+          </Link>
         </div>
-      </main>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {popular.map((race) => (
+            <RaceCard key={race.id} race={race} />
+          ))}
+        </div>
+      </section>
+
+      {/* CATEGORIES */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 py-16">
+        <h2 className="text-2xl font-bold text-white mb-2">Par catégorie</h2>
+        <p className="text-sm text-zinc-500 mb-8">Du sprint à l&apos;Ironman, trouve le format qui te correspond</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {CATEGORY_SECTIONS.map((section) => {
+            const count = section.categories.reduce((sum, cat) => sum + (categoryCounts[cat] || 0), 0);
+
+            return (
+              <Link
+                key={section.key}
+                href={`/courses?category=${section.key}`}
+                className="group relative overflow-hidden rounded-2xl border border-zinc-800 hover:border-zinc-700 transition-all"
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${section.gradient} opacity-10 group-hover:opacity-20 transition`} />
+                <div className="relative p-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-1">{section.label}</h3>
+                    <p className="text-sm text-zinc-500">{section.desc}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-mono font-bold text-white">{count}</p>
+                    <p className="text-xs text-zinc-500">courses</p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* SPORTS BREAKDOWN */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 py-16">
+        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-8 md:p-12">
+          <h2 className="text-2xl font-bold text-white mb-2 text-center">3 disciplines, 1 passion</h2>
+          <p className="text-sm text-zinc-500 text-center mb-10">Chaque course combine natation, vélo et course à pied</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Waves size={28} className="text-cyan-500" />
+              </div>
+              <h3 className="font-bold text-white mb-1">Natation</h3>
+              <p className="text-sm text-zinc-500">De 400m (Sprint) à 3.8km (Ironman) en eau libre</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Bike size={28} className="text-red-500" />
+              </div>
+              <h3 className="font-bold text-white mb-1">Vélo</h3>
+              <p className="text-sm text-zinc-500">De 20km (Sprint) à 180km (Ironman) sur route</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Activity size={28} className="text-amber-500" />
+              </div>
+              <h3 className="font-bold text-white mb-1">Course à pied</h3>
+              <p className="text-sm text-zinc-500">De 5km (Sprint) à 42.2km (Ironman) en marathon</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 py-16">
+        <CTABanner />
+      </section>
     </div>
   );
 }
